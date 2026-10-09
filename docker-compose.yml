@@ -1,0 +1,13 @@
+version: "3.8"
+services:
+  app:
+    build: .
+    ports:
+      - "3010:3010"
+    environment:
+      - NODE_ENV=production
+      - SQLITE_DB=/app/data/sqlite.db
+      - API_KEYS=key1,key2
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
