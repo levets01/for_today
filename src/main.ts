@@ -21,10 +21,10 @@ async function bootstrap() {
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
-  document.security = [
-    { 'x-api-key': [] },
-    { 'x-user': [] },
-  ];
+  document.security = [{
+    'x-api-key': [],
+    'x-user': []
+  }];
   SwaggerModule.setup('docs', app, document);
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
