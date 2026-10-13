@@ -1,4 +1,5 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, Index, OneToMany } from 'typeorm';
+import type { SolicitudHistorial } from './solicitud-historial.entity.js';
 
 export enum SolicitudeEstado {
   PENDIENTE = 'PENDIENTE',
@@ -17,16 +18,24 @@ export class Solicitude {
   @Column({ type: 'text' })
   descripcion: string;
 
+  @Index()
   @Column({ type: 'varchar', nullable: true })
   asesor: string | null;
 
+  @Index()
   @Column({ type: 'varchar', default: SolicitudeEstado.PENDIENTE })
   estado: SolicitudeEstado;
 
+  
+
+  @Index()
   @CreateDateColumn({ type: 'datetime' })
   creadaEn: Date;
 
   @UpdateDateColumn({ type: 'datetime' })
   actualizadaEn: Date;
+
+  @OneToMany('SolicitudHistorial', (historial: any) => historial.solicitud)
+  historial: SolicitudHistorial[];
 }
 
