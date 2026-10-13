@@ -6,7 +6,7 @@ API REST en NestJS para gestionar solicitudes comerciales con TypeORM + SQLite, 
 
 - Node.js 18 o superior
 - npm
-- Docker y Docker Compose (opcional, recomendado si quieres evitar problemas de compilación nativa de sqlite3)
+- Docker y Docker Compose (opcional)
 
 ## 1) Instalar dependencias
 
@@ -16,8 +16,6 @@ npm install
 
 ## 2) Configurar variables de entorno
 
-Crea un archivo `.env` en la raíz del proyecto con este contenido:
-
 ```env
 PORT=3010
 API_KEYS=key1,key2
@@ -25,125 +23,90 @@ SQLITE_DB=./data/sqlite.db
 NODE_ENV=production
 ```
 
-Importante:
-- `API_KEYS` son las claves válidas para la API. Todas las peticiones deben enviar una de esas claves en el header `x-api-key`.
-- `x-user` NO se configura en `.env`; debe enviarse por request y debe ser uno de estos usuarios válidos del servidor:
-  - `admin`
-  - `supervisor`
-  - `asesor1`
-  - `asesor2`
-
 ## 3) Ejecutar el proyecto
-
-### Opción A: Localmente
 
 ```bash
 npm run build
 API_KEYS=key1,key2 SQLITE_DB=./data/sqlite.db PORT=3010 node dist/main
 ```
 
-### Opción B: Con Docker (recomendado)
+Con Docker:
 
 ```bash
 mkdir -p ./data
 sudo docker compose up --build
 ```
 
-La API quedará disponible en:
+API: `http://localhost:3010`
+Swagger: `http://localhost:3010/docs`
 
-```text
-http://localhost:3010
-```
+## 4) Base de datos
 
-Swagger quedará disponible en:
+La aplicación usa SQLite mediante TypeORM. El esquema se sincroniza automáticamente al iniciar (`synchronize: true`), incluyendo las tablas `solicitudes` y `solicitud_historial`, índices por estado, asesor asignado y fecha de creación, y el campo `version` para control de concurrencia. La base de datos se guarda en `./data/sqlite.db`.
 
-```text
-http://localhost:3010/docs
-```
+## 5) Endpoints principales
 
-## 4) Paso a paso para usar Swagger
+- `POST /solicitudes`: crear solicitud. Estado inicial `PENDIENTE`.
+- `GET /solicitudes`: consultar con filtros y paginación.
+- `GET /solicitudes/:id`: consultar detalle.
+- `PATCH /solicitudes/:id/estado`: cambiar estado enviando `versionEsperada`.
+- `PATCH /solicitudes/:id/asignacion`: asignar o reasignar a un asesor (`admin` o `supervisor`).
+- `GET /solicitudes/:id/historial`: consultar trazabilidad.
 
-1. Abre la URL:
-   ```text
-   http://localhost:3010/docs
-   ```
-2. En la esquina superior derecha verás el botón `Authorize`.
-3. Pulsa `Authorize`.
-4. En el cuadro de diálogo introduce:
-   - `x-api-key: key1`
-   - `x-user: asesor1`
-5. Pulsa `Authorize` / `Close`.
-6. A partir de ahí, Swagger enviará automáticamente esos dos headers en cada petición protegida.
-7. Prueba cualquier endpoint de `solicitudes`.
+Filtros disponibles en `GET /solicitudes`: `estado`, `asesor`, `cliente`, `desde`, `hasta`, `page` y `limit` (máximo 100).
 
-Ejemplo válido en Swagger:
-- `x-api-key: key1`
-- `x-user: asesor1`
-
-## 5) Casos útiles
-
-### GET /solicitudes
+## 6) Ejemplos curl
 
 ```bash
 curl -X GET http://localhost:3010/solicitudes \
   -H "x-api-key: key1" \
   -H "x-user: asesor1"
-```
 
-### POST /solicitudes
-
-```bash
 curl -X POST http://localhost:3010/solicitudes \
   -H "x-api-key: key1" \
   -H "x-user: asesor1" \
   -H "Content-Type: application/json" \
-  -d '{
-    "cliente": "Empresa ABC",
-    "descripcion": "Solicitud de seguimiento comercial"
-  }'
-```
+  -d '{"cliente":"Empresa ABC","descripcion":"Solicitud de seguimiento comercial"}'
 
-### PATCH /solicitudes/:id/estado
-
-```bash
 curl -X PATCH http://localhost:3010/solicitudes/1/estado \
   -H "x-api-key: key1" \
   -H "x-user: asesor1" \
   -H "Content-Type: application/json" \
-  -d '{
-    "estado": "EN_GESTION"
-  }'
+  -d '{"estado":"EN_GESTION","versionEsperada":1}'
+
+curl -X PATCH http://localhost:3010/solicitudes/1/asignacion \
+  -H "x-api-key: key1" \
+  -H "x-user: supervisor" \
+  -H "Content-Type: application/json" \
+  -d '{"asesorId":"asesor2"}'
+
+curl -X GET http://localhost:3010/solicitudes/1/historial \
+  -H "x-api-key: key1" \
+  -H "x-user: supervisor"
 ```
 
-## 6) Usuarios válidos
-
-Los usuarios definidos en memoria son:
+## 7) Usuarios válidos
 
 - `admin`
 - `supervisor`
 - `asesor1`
 - `asesor2`
 
-## 7) Seguridad
+## 8) Seguridad
 
-Todos los endpoints funcionales requieren:
-- `x-api-key` válido
-- `x-user` válido
+Todos los endpoints requieren `x-api-key` válido y `x-user` válido. Los errores se devuelven con el formato uniforme del `HttpExceptionFilter`.
 
-Si falta cualquiera de los dos, la API devuelve `401` con un error normalizado.
+## 9) Decisiones técnicas
 
-## 8) Tests
+- Se conserva una única base SQLite y TypeORM; el historial se relaciona con la solicitud mediante `solicitudId`.
+- La paginación se ejecuta en base de datos con límites validados por DTO.
+- Las restricciones de acceso se aplican en la consulta TypeORM, no después de recuperar los registros.
+- Los cambios de estado incluyen control optimista por `version` y control de versiones en la misma transacción que registra el historial.
+- Las asignaciones no modifican el estado automáticamente.
+- Se normalizan los campos de texto y se rechazan cadenas compuestas solo por espacios.
+
+## 10) Tests
 
 ```bash
 npm run test
 ```
-
-## 9) Base de datos
-
-La app usa SQLite. La base de datos se guarda en:
-
-```text
-./data/sqlite.db
-```
-
-Con Docker, esa carpeta queda persistida en el host para que no se pierda al reiniciar el contenedor.
